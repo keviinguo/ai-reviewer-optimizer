@@ -1,161 +1,125 @@
 # AI Review Queue & Staffing Optimizer
 
-A Python operations project comparing staffing and scheduling decisions for a
-synthetic AI review team. It uses a discrete-event simulation, rather than a
-machine-learning model. No confidential Handshake data is used.
+A Python simulation that compares scheduling strategies and staffing levels for an AI review team. The project examines how task prioritization and reviewer capacity affect deadline compliance, waiting times, and backlog.
 
-## Run it
+## Motivation
 
-1. Install Python 3.10 or newer.
-2. Extract this folder and open a terminal in it. On Windows, open the folder,
-   click the address bar, type `cmd`, and press Enter.
-3. Install dependencies: `python -m pip install -r requirements.txt`
-4. Run: `python optimizer.py`
-5. Open the PNG charts and CSV tables in the `results` folder.
+My experience evaluating AI responses prompted me to explore how review teams could manage uneven workloads and competing priorities. This project uses synthetic tasks to test those operational decisions.
 
-If Windows uses the Python launcher, replace `python` with `py`.
-For a quicker run: `python optimizer.py --repeats 10`
-For more simulated days: `python optimizer.py --repeats 500 --seed 42`
-Run checks: `python -m unittest test_optimizer.py -v`
+All inputs are hypothetical. No internal Handshake data is used, and the results do not represent observed business improvements.
 
-Precomputed results from the default 100-day experiment are included, so you can
-inspect the project without running anything first. Dependency ranges are not
-an exact environment lock; minor differences can occur across library versions.
+## Business Question
 
-## The business question
+What is the smallest tested team that can complete at least 95% of tasks by their deadlines on at least 90% of simulated days?
 
-How many reviewers should be scheduled, and which waiting task should they
-handle next, to complete at least 95% of tasks by their deadlines?
+## Tools
 
-The staffing decision uses a second criterion: the 95% daily target must be met
-in at least 90% of simulated days. This avoids choosing a team solely because its
-average day looks good. Both targets are illustrative management assumptions.
+- Python
+- NumPy: random task generation
+- Pandas: task tracking and performance summaries
+- Matplotlib: staffing comparisons and reviewer timelines
+- heapq: tracking reviewer availability
 
-## What a task contains
+## Methodology
 
-| Field | Meaning |
-|---|---|
-| task_id | Unique identifier |
-| arrival | Minutes after shift start when the task enters the queue |
-| duration | Required review time in minutes |
-| deadline | Latest acceptable completion time |
-| task_type | Factual, quantitative, or safety review |
-| risk | Illustrative priority score: 1, 2, or 3 |
+Each task has an arrival time, review duration, deadline, task type, and risk score.
 
-The normal workload has 100 tasks; the surge workload has 130. Each shift is
-480 minutes. Tasks arrive within the first 420 minutes. On average, 65% arrive
-in the first four hours, creating an uneven workload.
+The simulation compares three scheduling strategies:
 
-Task types are sampled with probabilities 50%, 35%, and 15%. Their assumed
-median durations are 8, 15, and 20 minutes, respectively. Durations follow a
-lognormal distribution with log-scale standard deviation 0.4 and are clipped
-to 3–60 minutes. Risk scores are assigned by type, not estimated from data.
-Deadline windows are randomly selected from 45, 90, and 180 minutes, with
-probabilities 25%, 50%, and 25%, and capped at shift end.
+| Strategy | Assignment rule |
+|----------|-----------------|
+| First-in-first-out (FIFO) | Review the earliest-arriving task first |
+| Earliest deadline | Review the task with the closest deadline first |
+| Highest risk | Review the highest-risk task first |
 
-These are hypothetical assumptions, not measurements of AI review work.
+Each strategy is tested with two through five reviewers under two workloads:
 
-## How the simulation works
+- Normal demand: 100 tasks per day
+- Surge demand: 130 tasks per day
 
-1. Generate one day's task list using a random seed.
-2. Track when each reviewer becomes available.
-3. Move time to the next reviewer availability or task arrival as needed.
-4. Select a task only from tasks that have already arrived and are waiting.
-5. Assign it to an available reviewer and calculate its finish time.
-6. Repeat until no work remains or no reviewer can start before shift end.
+The experiment generates 100 days per workload. Within each day, every scheduling and staffing option receives the same task list, producing 2,400 simulations.
 
-Once started, a task cannot be interrupted. All reviewers have equal speed and
-can review every task type. A task started before minute 480 may finish after
-the shift; that overtime is reported. No new work starts at minute 480 or later.
-Missed-deadline tasks stay in the queue and may still be processed.
+## Assumptions
 
-The simulation knows the generated task duration when reporting finish time,
-but the scheduling policies do not prioritize using duration. It does not
-model uncertain estimates, breaks, quality differences, rework, or multi-day
-backlog carryover.
+- Each shift lasts eight hours.
+- Task arrivals are uneven, with an assumed morning surge.
+- Review durations follow a lognormal distribution and vary by task type.
+- All reviewers work at the same speed and can handle every task type.
+- Reviews cannot be interrupted once started.
+- Tasks may finish after shift end, but no new task starts after the shift.
+- Breaks, rework, quality differences, and multi-day backlog are not modeled.
 
-## The three policies
+## Performance Metrics
 
-| Policy | Selection rule | Business tradeoff |
-|---|---|---|
-| FIFO | Earliest arrival first | Simple and predictable; ignores urgency |
-| Earliest deadline | Closest deadline first | Prioritizes timeliness; may delay less urgent work |
-| Highest risk | Highest risk score first | Prioritizes consequential tasks; may miss low-risk deadlines |
+- On-time completion rate
+- End-of-shift backlog
+- Average waiting time among started tasks
+- Reviewer utilization
+- Overtime minutes
+- High-risk task deadline compliance
+- Percentage of days meeting the service target
 
-Ties use arrival and task ID, except highest risk first uses deadline before
-arrival. Risk priority measures timely coverage, not review accuracy or safety.
+Unstarted tasks count as failures when calculating on-time completion.
 
-## Fair comparisons
+## Results
 
-For each generated day, run every policy with 2, 3, 4, and 5 reviewers on the
-exact same task list. Repeat with 100 different seeds for each workload.
-This produces 2 × 100 × 4 × 3 = 2,400 simulations.
+The default experiment selected four reviewers using earliest-deadline scheduling as the smallest tested team meeting the planning rule under both workloads.
 
-Compare policies at a fixed headcount to assess scheduling effects. Compare
-headcounts under a fixed policy to assess staffing effects. The normal and
-surge scenarios use the same seed sequence but have different generated task
-lists; they are separate workload scenarios, not a task-by-task matched pair.
+| Workload | Mean on-time completion | Days meeting the 95% target |
+|----------|-------------------------|----------------------------|
+| Normal | 99.9% | 100 of 100 |
+| Surge | 97.9% | 90 of 100 |
 
-## Metrics and interpretation
+Under normal demand with three reviewers, earliest-deadline scheduling averaged 95.6% on-time completion, compared with 83.7% for FIFO. However, it achieved the daily target on only 80% of simulated days.
 
-| Metric | Calculation / interpretation |
-|---|---|
-| On-time rate | Tasks finished by deadline / all generated tasks; unstarted tasks count as failures |
-| End-of-shift backlog | Tasks unfinished at minute 480, including tasks still in progress |
-| Not started | Tasks that never begin during the shift |
-| Average wait | Start minus arrival, averaged only over started tasks |
-| Turnaround | Finish minus arrival, reported per started task |
-| Lateness | Max(0, finish minus deadline), reported per started task |
-| Utilization | Reviewer busy minutes within shift / available reviewer minutes |
-| Overtime minutes | Total reviewer minutes worked after shift end |
-| High-risk on-time rate | On-time fraction among risk-3 tasks |
-| P10 on-time rate | 10th percentile of simulated daily on-time rates; describes weaker days, not a confidence interval |
-| Share of days meeting target | Fraction of simulated days achieving at least 95% on-time |
+This illustrates why average performance alone may be insufficient for staffing decisions.
 
-Average wait excludes unstarted tasks, so read it alongside backlog and
-not-started counts. High utilization can coexist with missed deadlines.
-The scheduler does not deliberately idle to preserve capacity for future tasks.
+![Staffing comparison](results/staffing_comparison.png)
 
-## Outputs
+![Example reviewer schedule](results/sample_schedule.png)
 
-- `sample_tasks.csv`: one reproducible normal day.
-- `sample_schedule.csv`: assignment, wait, finish, and deadline status for
-  that day using three reviewers and earliest deadline.
-- `all_runs.csv`: all 2,400 simulation summaries.
-- `comparison_summary.csv`: average and variability metrics for each option.
-- `staffing_comparison.png`: on-time rate versus headcount.
-- `sample_schedule.png`: reviewer timelines colored by risk.
-- `findings.txt`: lowest tested headcount meeting the planning criterion.
+## How to Run
 
-The recommendation first minimizes headcount, then breaks ties by higher mean
-on-time rate and lower average wait. It searches only the tested options. It
-does not solve a global mathematical optimization or estimate labor costs.
+Install Python 3.10 or newer, then install the dependencies:
 
-## Make it your own
+    python -m pip install -r requirements.txt
 
-Start by reading `generate_tasks()`, then `simulate()`, then `experiment()`.
-Change one assumption at a time and rerun:
+Run the simulation:
 
-1. Change task counts in `experiment()` to test larger demand shocks.
-2. Change duration medians to test more complex reviews.
-3. Change deadline windows to test stricter service commitments.
-4. Extend the staffing range and compare whether extra capacity is worth it.
+    python optimizer.py
 
-For a stronger second version, add reviewer breaks and skill restrictions,
-then test how recommendations change. A later version could accept a public
-or authorized anonymized task dataset, with validation and explicit assumptions.
-Do not present synthetic results as measured improvements at Handshake.
+For a shorter experiment:
 
-## Resume wording after you understand and adapt the project
+    python optimizer.py --repeats 10
 
-- Developed a Python discrete-event simulation of AI review operations,
-  comparing three scheduling policies across four staffing levels and 2,400
-  simulated daily workloads.
-- Analyzed deadline compliance, backlog, utilization, and high-risk task
-  coverage to identify the lowest tested staffing level meeting a defined
-  service target under normal and surge demand.
+Run the automated checks:
 
-The 2,400 count assumes the default run. These describe a simulation project,
-not deployed operational changes. Be ready to explain the queue logic, input
-assumptions, and the difference between average performance and reliable
-performance across days.
+    python -m unittest test_optimizer.py -v
+
+## Project Files
+
+| File | Description |
+|------|-------------|
+| optimizer.py | Task generation, scheduling simulation, experiments, and charts |
+| requirements.txt | Python dependencies |
+| test_optimizer.py | Checks for scheduling behavior and metric calculations |
+| results/sample_tasks.csv | One generated day's tasks |
+| results/sample_schedule.csv | Task assignments and completion times |
+| results/all_runs.csv | Metrics for every simulation |
+| results/comparison_summary.csv | Performance summaries by workload, staffing, and strategy |
+| results/findings.txt | Staffing recommendations |
+| results/*.png | Comparison and schedule charts |
+
+## Limitations
+
+The recommendation depends on assumed task arrivals, durations, and deadlines. It minimizes headcount only among the tested options and does not solve a global optimization problem.
+
+Prioritizing high-risk tasks measures timely coverage, not review quality. The surge result meets the reliability threshold exactly in this sample; additional simulations and sensitivity analysis would help assess its stability.
+
+## Future Improvements
+
+- Model reviewer breaks and skill restrictions
+- Add labor costs and overtime limits
+- Carry unfinished tasks into subsequent days
+- Test different arrival patterns and deadline requirements
+- Validate assumptions using an authorized operational dataset
